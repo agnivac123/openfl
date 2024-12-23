@@ -644,7 +644,7 @@ if __name__ == "__main__":
 
     # Initialize the aggregator with the callable
     # Set `num_gpus=0.09` to `num_gpus=0.0` in order to run this tutorial on CPU
-    
+
     def callable_to_initialize_aggregator_private_attributes():
         # Load the configuration file to get dp_params
         with open(args.config_path, "rb") as _file:
@@ -657,7 +657,7 @@ if __name__ == "__main__":
             collaborator_names=collaborator_names,
             dp_params=dp_params
         )}
-    
+
     aggregator = Aggregator(
         name="agg",
         private_attributes_callable= callable_to_initialize_aggregator_private_attributes,
