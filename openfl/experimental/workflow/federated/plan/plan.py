@@ -311,6 +311,13 @@ class Plan:
         defaults[SETTINGS]["private_attributes"] = private_attributes
 
         defaults[SETTINGS]["flow"] = self.get_flow()
+
+
+        import torch
+        defaults[SETTINGS]["flow"].model.load_state_dict(torch.load('./src/model.pth'))
+
+
+
         defaults[SETTINGS]["checkpoint"] = defaults[SETTINGS]["flow"].checkpoint
 
         log_metric_callback = defaults[SETTINGS].get("log_metric_callback")

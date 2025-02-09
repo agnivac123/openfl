@@ -185,7 +185,10 @@ class FLSpec:
         """Executes the flow using FederatedRuntime."""
         try:
             # Prepare workspace and submit it for the FederatedRuntime
-            archive_path, exp_name = self.runtime.prepare_workspace_archive()
+
+            archive_path, exp_name = self.runtime.prepare_workspace_archive(flspec=self)
+
+            
             self.runtime.submit_experiment(archive_path, exp_name)
             # Stream the experiment's stdout if the checkpoint is enabled
             if self._checkpoint:

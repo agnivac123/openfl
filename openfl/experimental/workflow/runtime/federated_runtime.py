@@ -138,7 +138,7 @@ class FederatedRuntime(Runtime):
             certificate=self.certificate,
         )
 
-    def prepare_workspace_archive(self) -> Tuple[Path, str]:
+    def prepare_workspace_archive(self, flspec=None) -> Tuple[Path, str]:
         """
         Prepare workspace archive using WorkspaceExport.
 
@@ -149,6 +149,7 @@ class FederatedRuntime(Runtime):
         archive_path, exp_name = WorkspaceExport.export_federated(
             notebook_path=self.notebook_path,
             output_workspace="./generated_workspace",
+            flspec=flspec,
         )
         return archive_path, exp_name
 

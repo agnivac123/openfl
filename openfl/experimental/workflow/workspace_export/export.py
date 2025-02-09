@@ -275,7 +275,7 @@ class WorkspaceExport:
             yaml.safe_dump(data, y)
 
     @classmethod
-    def export_federated(cls, notebook_path: str, output_workspace: str) -> Tuple[str, str]:
+    def export_federated(cls, notebook_path: str, output_workspace: str, flspec) -> Tuple[str, str]:
         """Exports workspace for FederatedRuntime.
 
         Args:
@@ -291,7 +291,7 @@ class WorkspaceExport:
         instance.generate_plan_yaml()
         instance._clean_generated_workspace()
         print_tree(output_workspace, level=2)
-        return instance.generate_experiment_archive()
+        return instance.generate_experiment_archive(flspec)
 
     @classmethod
     def export(cls, notebook_path: str, output_workspace: str) -> None:
@@ -307,7 +307,7 @@ class WorkspaceExport:
         instance.generate_data_yaml()
         print_tree(output_workspace, level=2)
 
-    def generate_experiment_archive(self) -> Tuple[str, str]:
+    def generate_experiment_archive(self, flspec=None) -> Tuple[str, str]:
         """
         Create archive of the generated workspace
 
@@ -318,6 +318,12 @@ class WorkspaceExport:
         parent_directory = self.output_workspace_path.parent
         archive_path = parent_directory / "experiment"
 
+        import torch
+        model_path = self.output_workspace_path / "src" / "model.pth"
+        torch.save(flspec.model.state_dict(), model_path)
+
+
+        
         # Create a ZIP archive of the generated_workspace directory
         arch_path = shutil.make_archive(str(archive_path), "zip", str(self.output_workspace_path))
 
