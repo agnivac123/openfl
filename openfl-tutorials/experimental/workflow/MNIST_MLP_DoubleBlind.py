@@ -11,7 +11,7 @@ import time
 # Check if GPU (CUDA) is available, else use CPU
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# ========== Data Loading (using your code) ==========
+# ========== Data Loading ==========
 mnist_train = torchvision.datasets.MNIST(
     "./files/",
     train=True,
