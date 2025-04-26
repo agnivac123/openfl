@@ -6,6 +6,7 @@ import math
 import torchvision
 from torchvision import transforms
 import numpy as np
+import time
 
 # Check if GPU (CUDA) is available, else use CPU
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -218,7 +219,7 @@ class MLP_SketchLinear(nn.Module):
         self.dim_in = dim_in
         self.dim_out = dim_out
         self.p = p
-        self.hidden = [200, 200]  # Hidden layer sizes
+        self.hidden = [1000, 1000]  # Hidden layer sizes
 
         # Initialize layers (but don't init weights yet)
         self.input_layer = SketchLinear(dim_in, self.hidden[0], p)
@@ -247,37 +248,37 @@ class MLP_SketchLinear(nn.Module):
             x = self.activation(layer(x))
         return self.log_softmax(self.output_layer(x))
     
-# Multilayer perceptron
-# Args:
-    #    dim_in: input dimension
-    #    dim_out: output dimension
-# Return:
-    #    log probabilities of the classes
-class NN(nn.Module):
-    def __init__(self, dim_in, dim_out):
-        super().__init__()
-        self.dim_in = dim_in
-        self.dim_out = dim_out
-        self.hidden = [1000, 1000]
+# # Multilayer perceptron
+# # Args:
+#     #    dim_in: input dimension
+#     #    dim_out: output dimension
+# # Return:
+#     #    log probabilities of the classes
+# class NN(nn.Module):
+#     def __init__(self, dim_in, dim_out):
+#         super().__init__()
+#         self.dim_in = dim_in
+#         self.dim_out = dim_out
+#         self.hidden = [1000, 1000]
 
-        self.input_layer = nn.Linear(self.dim_in, self.hidden[0])
-        self.hidden_layers = nn.ModuleList([nn.Linear(self.hidden[i], self.hidden[i + 1])
-                                            for i in range(0, len(self.hidden) - 1)])
+#         self.input_layer = nn.Linear(self.dim_in, self.hidden[0])
+#         self.hidden_layers = nn.ModuleList([nn.Linear(self.hidden[i], self.hidden[i + 1])
+#                                             for i in range(0, len(self.hidden) - 1)])
 
-        self.output_layer = nn.Linear(self.hidden[-1], self.dim_out)
-        self.activation = nn.ReLU()
-        self.log_softmax = nn.LogSoftmax(dim=1)
+#         self.output_layer = nn.Linear(self.hidden[-1], self.dim_out)
+#         self.activation = nn.ReLU()
+#         self.log_softmax = nn.LogSoftmax(dim=1)
 
-    def forward(self, x):
-        x = x.view(-1, self.dim_in)
-        output = self.input_layer(x)
-        output = self.activation(output)
-        for hidden_layers in self.hidden_layers:
-            output = hidden_layers(output)
-        output = self.activation(output)
-        output = self.output_layer(output)
-        output = self.log_softmax(output)
-        return output
+#     def forward(self, x):
+#         x = x.view(-1, self.dim_in)
+#         output = self.input_layer(x)
+#         output = self.activation(output)
+#         for hidden_layers in self.hidden_layers:
+#             output = hidden_layers(output)
+#         output = self.activation(output)
+#         output = self.output_layer(output)
+#         output = self.log_softmax(output)
+#         return output
     
 
 def inference(network, test_loader):
@@ -323,7 +324,6 @@ class FederatedFlow(FLSpec):
             self.optimizer = optimizer
         else:
             self.model = MLP_SketchLinear(dim_in=784, dim_out=10, p=2)
-            # self.model = NN(dim_in=784, dim_out=10)
 
             self.optimizer = optim.SGD(self.model.parameters(), lr=learning_rate,
                                        momentum=momentum)
@@ -339,14 +339,14 @@ class FederatedFlow(FLSpec):
         self.hash_idxs = []
         self.rand_sgns = []
         
-        # Generate for input layer (784->1000)
-        h, r = Sketch.rand_hashing(784, self.model.p, seed=42+self.current_round)
+        # Generate for input layer 
+        h, r = Sketch.rand_hashing(784, self.model.p, seed=753+self.current_round)
         self.hash_idxs.append(h)
         self.rand_sgns.append(r)
         
-        # Generate for hidden layers (1000->1000)
+        # Generate for hidden layers
         for _ in range(len(self.model.hidden_layers)):
-            h, r = Sketch.rand_hashing(200, self.model.p, seed=43+self.current_round)
+            h, r = Sketch.rand_hashing(1000, self.model.p, seed=43+self.current_round)
             self.hash_idxs.append(h)
             self.rand_sgns.append(r)
 
@@ -435,17 +435,16 @@ class FederatedFlow(FLSpec):
             self.next(self.aggregated_model_validation,
                     foreach='collaborators',
                     hash_idxs=self.hash_idxs,  # Broadcast new hash parameters
-                    rand_sgns=self.rand_sgns,
+                    rand_sgns=self.rand_sgns,  # Broadcast new hash parameters
                     exclude=['private'])
         else:
             self.next(self.end)
 
     @aggregator
-    def end(self, *args, **kwargs):  # Fix signature
+    def end(self, *args, **kwargs):
         print(f'This is the end of the flow')
 
 
-import time
 start_time = time.time()
 
 # Setup participants
