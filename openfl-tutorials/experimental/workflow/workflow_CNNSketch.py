@@ -61,7 +61,7 @@ class Sketch():
     @staticmethod
     def rand_hashing(n, q):
         """
-        Generate a random hashing scheme for CountSketch.
+        Generate a (possibly identity) hashing scheme for CountSketch.
 
         Args:
             n (int): Original input dimension.
@@ -71,17 +71,34 @@ class Sketch():
             hash_idx (LongTensor[q_eff, s]): Indices mapping original features into s buckets,
                                              repeated q_eff times.
             rand_sgn (FloatTensor[n]): Random +-1 signs for each of the n original features.
+
+        Exception: If n <= 5 or q >= n, returns an 'identity' sketch of size n → n:
+          hash_idx = [[0, 1, 2, ..., n-1]]
+          rand_sgn = [1, 1, ..., 1]
+        Otherwise behaves as before.
         """
         assert q >= 1.0, "q must be >= 1.0"
-        # Target sketch size
+
+        # Hard-coded identity for very small dimensions or no compression
+        if n <= 5 or q >= n:
+            hash_idx = torch.arange(n, device=device).unsqueeze(0).long()  # shape (1, n)
+            rand_sgn = torch.ones(n, device=device).float()               # no sign flipping
+            return hash_idx, rand_sgn
+        # if n <= 5 or q >= n:
+        #     perm = torch.randperm(n, device=device)
+        #     hash_idx = perm.unsqueeze(0).long()                      # shape (1, n)
+        #     rand_sgn = (torch.randint(0, 2, (n,), device=device).float() * 2 - 1)
+        #     return hash_idx, rand_sgn
+
+        # Target sketch size for larger dimensions
         s = max(1, min(int(n / q), n))
         # Effective q, clamped so that q_eff * s <= n
         raw_qeff = math.floor(q) if q >= 2.0 else 1
-        q_eff = min(raw_qeff, n // s) or 1  # ensure at least 1
+        q_eff = min(raw_qeff, n // s) or 1
 
         perm = torch.randperm(n, device=device)
-        total = q_eff * s
         # Now total <= n guaranteed
+        total = q_eff * s
         flat = perm[:total]
         hash_idx = flat.reshape(q_eff, -1)
         rand_sgn = (torch.randint(0, 2, (n,), device=device).float() * 2 - 1)
@@ -408,9 +425,9 @@ class FederatedFlow(FLSpec):
         else:
             # choose architecture by dataset + sketch flag
             if USE_MNIST:
-                model = (CNNMnist_Sketch(q=7) if USE_SKETCH else CNNMnist())
+                model = (CNNMnist_Sketch(q=8) if USE_SKETCH else CNNMnist())
             else:
-                model = (CNNCifar_Sketch(q=7) if USE_SKETCH else CNNCifar())
+                model = (CNNCifar_Sketch(q=8) if USE_SKETCH else CNNCifar())
             self.model = model.to(device)
             self.optimizer = optim.SGD(
                 self.model.parameters(),
@@ -623,7 +640,7 @@ print(f'Local runtime collaborators = {local_runtime.collaborators}')
 model = None
 best_model = None
 optimizer = None
-flflow = FederatedFlow(model, optimizer, rounds=5, checkpoint=False)
+flflow = FederatedFlow(model, optimizer, rounds=100, checkpoint=False)
 flflow.runtime = local_runtime
 flflow.run()
 
