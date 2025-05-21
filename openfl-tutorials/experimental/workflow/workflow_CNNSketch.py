@@ -2,7 +2,8 @@
 #######  CONFIGURATION ######
 #============================
 USE_MNIST    = False     # set True to train on MNIST, False --> CIFAR10
-USE_SKETCH   = True     # set True to use the "_Sketch" versions of the models
+USE_SKETCH   = False     # set True to use the "_Sketch" versions of the models
+USE_SEP      = True     # set True for depthwise-separable convolution
 
 
 import torch.nn as nn
@@ -72,7 +73,7 @@ class Sketch():
                                              repeated q_eff times.
             rand_sgn (FloatTensor[n]): Random +-1 signs for each of the n original features.
 
-        Exception: If n <= 5 or q >= n, returns an 'identity' sketch of size n → n:
+        Exception: If n <= 5 or q >= n, returns an 'identity' sketch of size n --> n:
           hash_idx = [[0, 1, 2, ..., n-1]]
           rand_sgn = [1, 1, ..., 1]
         Otherwise behaves as before.
@@ -210,6 +211,20 @@ class SketchLinear(nn.Module):
         w_sk = Sketch.countsketch(self.weight, self.hash_idx, self.rand_sgn)  # (out_f, s_wt)
         # 3) plain linear
         return F.linear(x_sk, w_sk, self.bias)
+    
+class SepConv(nn.Module):
+    """
+    Depthwise-separable convolution block:
+      1) Depthwise conv (groups=in_channels)
+      2) Pointwise 1x1 conv to mix channels
+    This reduces computation vs. a standard conv by splitting spatial and channel mixing.
+    """
+    def __init__(self, in_c, out_c, k, padding=1):
+        super().__init__()
+        self.depthwise = nn.Conv2d(in_c, in_c, k, padding=padding, groups=in_c)
+        self.pointwise = nn.Conv2d(in_c, out_c, 1)
+    def forward(self, x):
+        return self.pointwise(self.depthwise(x))
 
 #===========================================================    
 ################### MODEL CLASSES ##########################
@@ -376,6 +391,38 @@ class CNNCifar_Sketch(nn.Module):
         x = F.relu(self.fc1(x))
         return F.log_softmax(self.fc2(x), dim=1)
     
+class CNNCifar_SepConv(nn.Module):
+    """
+    A CIFAR-10 CNN using depthwise-separable convolutions.
+
+    Architecture matches CNNCifar but replaces each Conv2d->BN->ReLU block with:
+      SepConv(in_c->out_c) -> BatchNorm -> ReLU -> MaxPool
+
+    This design (MobileNet-style) reduces FLOPs by
+    decoupling spatial (depthwise) and channel (pointwise) operations.
+    """
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(3, 32, 5, padding=2),
+            nn.BatchNorm2d(32), nn.ReLU())
+        self.conv2 = nn.Sequential(
+            SepConv(32,64, 5, padding=2),
+            nn.BatchNorm2d(64), nn.ReLU())
+        self.pool  = nn.MaxPool2d(2,2)
+        self.conv3 = nn.Sequential(
+            SepConv(64,128,5, padding=2),
+            nn.BatchNorm2d(128), nn.ReLU())
+        self.fc1   = nn.Linear(8192, 200)
+        self.fc2   = nn.Linear(200, 10)
+
+    def forward(self, x):
+        x = self.pool(self.conv2(self.conv1(x)))
+        x = self.pool(self.conv3(x))
+        x = x.reshape(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        return F.log_softmax(self.fc2(x), dim=1)
+    
 
     
 def inference(network,test_loader):
@@ -425,10 +472,19 @@ class FederatedFlow(FLSpec):
         else:
             # choose architecture by dataset + sketch flag
             if USE_MNIST:
-                model = (CNNMnist_Sketch(q=8) if USE_SKETCH else CNNMnist())
+                if USE_SKETCH:
+                    self.model = CNNMnist_Sketch(q=8).to(device)
+                else:
+                    self.model = CNNMnist().to(device)
+            
             else:
-                model = (CNNCifar_Sketch(q=8) if USE_SKETCH else CNNCifar())
-            self.model = model.to(device)
+                if USE_SEP:
+                    self.model = CNNCifar_SepConv().to(device)
+                elif USE_SKETCH: 
+                    self.model = CNNCifar_Sketch(q=8).to(device)
+                else:
+                    self.model = CNNCifar().to(device)
+                
             self.optimizer = optim.SGD(
                 self.model.parameters(),
                 lr=learning_rate, momentum=momentum
