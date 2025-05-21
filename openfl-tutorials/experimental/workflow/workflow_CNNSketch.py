@@ -2,8 +2,10 @@
 #######  CONFIGURATION ######
 #============================
 USE_MNIST    = False     # set True to train on MNIST, False --> CIFAR10
-USE_SKETCH   = False     # set True to use the "_Sketch" versions of the models
-USE_SEP      = True     # set True for depthwise-separable convolution
+
+# if both are set False, then vanilla CNN. Dont set both True simultaneously.
+USE_SKETCH   = True     # set True to use the "_Sketch" versions of the models
+USE_SEP      = False    # set True for depthwise-separable convolution
 
 
 import torch.nn as nn
@@ -219,7 +221,7 @@ class SepConv(nn.Module):
       2) Pointwise 1x1 conv to mix channels
     This reduces computation vs. a standard conv by splitting spatial and channel mixing.
     """
-    def __init__(self, in_c, out_c, k, padding=1):
+    def __init__(self, in_c, out_c, k, padding=0):
         super().__init__()
         self.depthwise = nn.Conv2d(in_c, in_c, k, padding=padding, groups=in_c)
         self.pointwise = nn.Conv2d(in_c, out_c, 1)
@@ -290,6 +292,30 @@ class CNNMnist_Sketch(nn.Module):
         self.conv1 = SketchConvChannel(1, 64, 5, q=q)
         self.conv2 = SketchConvChannel(64,128, 5, q=q)
         self.fc1   = SketchLinear(2048, 512, q=q)
+        self.fc2   = nn.Linear(512, 10)
+
+    def forward(self, x):
+        x = F.relu(F.max_pool2d(self.conv1(x),2))
+        x = F.relu(F.max_pool2d(self.conv2(x),2))
+        x = x.reshape(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        return F.log_softmax(self.fc2(x), dim=1)
+    
+class CNNMnist_SepConv(nn.Module):
+    """
+    A MNIST CNN using depthwise-separable convolutions.
+
+    Architecture matches CNNMnist but replaces second Conv2d with:
+      SepConv(in_c->out_c)
+
+    This design (MobileNet-style) reduces FLOPs by
+    decoupling spatial (depthwise) and channel (pointwise) operations.
+    """
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 64, 5)
+        self.conv2 = SepConv(64,128, 5)
+        self.fc1   = nn.Linear(2048, 512)
         self.fc2   = nn.Linear(512, 10)
 
     def forward(self, x):
@@ -472,7 +498,9 @@ class FederatedFlow(FLSpec):
         else:
             # choose architecture by dataset + sketch flag
             if USE_MNIST:
-                if USE_SKETCH:
+                if USE_SEP:
+                    self.model = CNNMnist_SepConv().to(device)
+                elif USE_SKETCH:
                     self.model = CNNMnist_Sketch(q=8).to(device)
                 else:
                     self.model = CNNMnist().to(device)
