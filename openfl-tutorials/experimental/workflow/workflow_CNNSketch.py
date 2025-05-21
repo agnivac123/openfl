@@ -541,11 +541,14 @@ class FederatedFlow(FLSpec):
                 q = self.model.conv1[0].q
             except Exception:
                 q = self.model.conv1.q
+            print(f"Started federated training with model: {model_name} (q={q})")
+
             q_str = f"{q:g}".replace('.', 'p')
             fname_acc  = f"{model_name}_q{q_str}_{metric_acc}.txt"
             fname_time = f"{model_name}_q{q_str}_{metric_time}.txt"
             fname_loss = f"{model_name}_q{q_str}_{metric_loss}.txt"
         else:
+            print(f"Started federated training with model: {model_name}")
             fname_acc  = f"{model_name}_{metric_acc}.txt"
             fname_time = f"{model_name}_{metric_time}.txt"
             fname_loss = f"{model_name}_{metric_loss}.txt"
